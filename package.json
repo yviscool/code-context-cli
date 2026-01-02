@@ -1,0 +1,55 @@
+{
+  "name": "code-context-cli",
+  "version": "0.1.0",
+  "description": "Weave your codebase into AI-ready context. A CLI tool that transforms source code into optimized LLM input.",
+  "keywords": [
+    "ai",
+    "llm",
+    "context",
+    "code",
+    "cli",
+    "prompt-engineering",
+    "gpt",
+    "claude",
+    "copilot"
+  ],
+  "author": "YV",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "ctx": "dist/cli.js"
+  },
+  "module": "./dist/index.mjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "bun": "./dist/bun/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test",
+    "dev": "bun run src/cli/index.ts",
+    "build": "bun run build.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "cac": "^6.7.14",
+    "clipboardy": "^5.0.2",
+    "gpt-tokenizer": "^3.4.0",
+    "ink": "5",
+    "ink-text-input": "6",
+    "picocolors": "^1.1.1",
+    "react": "18",
+    "react-reconciler": "0.29",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2"
+  }
+}
