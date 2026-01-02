@@ -6,8 +6,8 @@ import { format } from '../formatter';
 import type { ScanResult } from '../scanner';
 
 const mockResults: ScanResult[] = [
-    { path: 'src/main.ts', content: 'console.log("hello");', language: 'typescript' },
-    { path: 'src/utils.ts', content: 'export const add = (a, b) => a + b;', language: 'typescript' },
+    { path: 'src/main.ts', content: 'console.log("hello");', language: 'typescript', tokenInfo: { chars: 21, lines: 1, tokens: 8 } },
+    { path: 'src/utils.ts', content: 'export const add = (a, b) => a + b;', language: 'typescript', tokenInfo: { chars: 35, lines: 1, tokens: 15 } },
 ];
 
 describe('Formatter', () => {
@@ -51,7 +51,7 @@ describe('Formatter', () => {
 
         test('should escape special XML characters', () => {
             const resultsWithSpecialChars: ScanResult[] = [
-                { path: 'test.ts', content: 'a < b && c > d', language: 'typescript' },
+                { path: 'test.ts', content: 'a < b && c > d', language: 'typescript', tokenInfo: { chars: 14, lines: 1, tokens: 9 } },
             ];
 
             const output = format(resultsWithSpecialChars, { format: 'xml' });

@@ -10,6 +10,7 @@ export interface FormatOptions {
     includeTree?: boolean;
     signaturesOnly?: boolean;
     symbols?: Map<string, CodeSymbol[]>;
+    compact?: boolean;
 }
 
 /**
@@ -61,6 +62,41 @@ function buildTree(paths: string[]): string {
 }
 
 /**
+ * Compress content by removing empty lines and comments
+ */
+function compactContent(content: string, language: string): string {
+    const lines = content.split('\n');
+    const result: string[] = [];
+    let prevEmpty = false;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+
+        // Skip empty lines (keep max one consecutive)
+        if (!trimmed) {
+            if (!prevEmpty) result.push('');
+            prevEmpty = true;
+            continue;
+        }
+        prevEmpty = false;
+
+        // Skip single-line comments for JS/TS/C-like languages
+        if (['typescript', 'javascript', 'tsx', 'jsx', 'c', 'cpp', 'java', 'rust', 'go'].includes(language)) {
+            if (trimmed.startsWith('//') && !trimmed.startsWith('///')) continue;
+        }
+
+        // Skip Python comments
+        if (language === 'python' && trimmed.startsWith('#') && !trimmed.startsWith('#!')) {
+            continue;
+        }
+
+        result.push(line);
+    }
+
+    return result.join('\n');
+}
+
+/**
  * Format content based on options
  */
 function getFileContent(result: ScanResult, options: FormatOptions): string {
@@ -74,7 +110,14 @@ function getFileContent(result: ScanResult, options: FormatOptions): string {
         }
     }
 
-    return result.content;
+    let content = result.content;
+
+    // Apply compact mode
+    if (options.compact) {
+        content = compactContent(content, result.language);
+    }
+
+    return content;
 }
 
 /**

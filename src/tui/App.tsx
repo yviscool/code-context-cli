@@ -1,24 +1,34 @@
 /**
  * TUI App - Interactive File Selection
+ * Refactored with tree-utils for cleaner code
  */
 import React, { useState, useEffect, useMemo } from 'react';
 import { render, Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import { scan, type ScanResult } from '../scanner';
 import { format } from '../formatter';
-import { countTokens, formatTokens, getTokenColor } from '../tokenizer';
+import { formatTokens, getTokenColor } from '../tokenizer';
 import clipboard from 'clipboardy';
 
-interface FileNode {
-    name: string;
-    path: string;
-    isDir: boolean;
-    children?: FileNode[];
-    result?: ScanResult;
-    tokens?: number;
-    selected: boolean;
-    expanded: boolean;
-}
+import {
+    type FileNode,
+    buildFileTree,
+    flattenTree,
+    cloneTree,
+    findAndApply,
+    toggleSelection,
+    toggleExpand,
+    selectAll,
+    deselectAll,
+    invertSelection,
+    expandAll,
+    collapseAll,
+    toggleCurrentDirSelection,
+    toggleTestFiles,
+    getSelectedStats,
+    getDirStats,
+    isNodeSelected,
+} from './tree-utils';
 
 interface AppProps {
     cwd: string;
@@ -28,92 +38,39 @@ interface AppProps {
 }
 
 /**
- * Build tree structure from scan results
+ * File Tree Item Component with enhanced visuals
  */
-function buildFileTree(results: ScanResult[]): FileNode[] {
-    const root: Record<string, any> = {};
-
-    for (const result of results) {
-        const parts = result.path.split('/');
-        let current = root;
-
-        for (let i = 0; i < parts.length; i++) {
-            const part = parts[i];
-            if (i === parts.length - 1) {
-                current[part] = { result, tokens: countTokens(result.content).tokens };
-            } else {
-                if (!current[part]) current[part] = {};
-                current = current[part];
-            }
-        }
-    }
-
-    function toNodes(obj: Record<string, any>, parentPath = ''): FileNode[] {
-        return Object.entries(obj)
-            .map(([name, value]) => {
-                const path = parentPath ? `${parentPath}/${name}` : name;
-                if (value.result) {
-                    return {
-                        name,
-                        path,
-                        isDir: false,
-                        result: value.result,
-                        tokens: value.tokens,
-                        selected: false,
-                        expanded: false,
-                    };
-                }
-                return {
-                    name,
-                    path,
-                    isDir: true,
-                    children: toNodes(value, path),
-                    selected: false,
-                    expanded: true,
-                };
-            })
-            .sort((a, b) => {
-                if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-                return a.name.localeCompare(b.name);
-            });
-    }
-
-    return toNodes(root);
-}
-
-/**
- * Flatten tree for navigation
- */
-function flattenTree(nodes: FileNode[], depth = 0): Array<{ node: FileNode; depth: number }> {
-    const result: Array<{ node: FileNode; depth: number }> = [];
-
-    for (const node of nodes) {
-        result.push({ node, depth });
-        if (node.isDir && node.expanded && node.children) {
-            result.push(...flattenTree(node.children, depth + 1));
-        }
-    }
-
-    return result;
-}
-
-/**
- * File Tree Item Component
- */
-function TreeItem({ node, depth, isActive, filter }: {
+function TreeItem({ node, depth, isActive, filter, showDirStats }: {
     node: FileNode;
     depth: number;
     isActive: boolean;
     filter: string;
+    showDirStats: boolean;
 }) {
     const indent = '  '.repeat(depth);
     const icon = node.isDir
         ? (node.expanded ? '📂' : '📁')
         : '📄';
     const checkbox = node.selected ? '[✓]' : '[ ]';
-    const tokenBadge = node.tokens
-        ? ` (${formatTokens(node.tokens)} tok)`
-        : '';
+
+    // Token badge with color coding
+    let tokenBadge = '';
+    let tokenColor: 'green' | 'yellow' | 'red' | 'gray' = 'gray';
+
+    if (node.tokens) {
+        tokenBadge = ` (${formatTokens(node.tokens)} tok)`;
+        // Color code by token count
+        if (node.tokens > 5000) tokenColor = 'red';
+        else if (node.tokens > 2000) tokenColor = 'yellow';
+        else tokenColor = 'green';
+    }
+
+    // Directory stats badge
+    let dirBadge = '';
+    if (node.isDir && showDirStats) {
+        const stats = getDirStats(node);
+        dirBadge = ` [${stats.fileCount} files | ${formatTokens(stats.totalTokens)}]`;
+    }
 
     // Highlight matching text
     const nameColor = filter && node.name.toLowerCase().includes(filter.toLowerCase())
@@ -133,9 +90,11 @@ function TreeItem({ node, depth, isActive, filter }: {
                 {node.name}
                 {node.isDir && '/'}
             </Text>
-            <Text color="gray" dimColor>
-                {tokenBadge}
-            </Text>
+            {node.isDir ? (
+                <Text color="gray" dimColor>{dirBadge}</Text>
+            ) : (
+                <Text color={tokenColor} dimColor>{tokenBadge}</Text>
+            )}
         </Box>
     );
 }
@@ -151,6 +110,8 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
     const [filter, setFilter] = useState('');
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState<ScanResult[]>([]);
+    const [showDirStats, setShowDirStats] = useState(true);
+    const [lastKey, setLastKey] = useState(''); // For gg/zz detection
 
     // Load files
     useEffect(() => {
@@ -170,24 +131,17 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
         );
     }, [tree, filter]);
 
-    // Calculate selected tokens
+    // Calculate selected stats using tree-utils
     const { selectedCount, totalTokens } = useMemo(() => {
-        let count = 0;
-        let tokens = 0;
-
-        function traverse(nodes: FileNode[]) {
-            for (const node of nodes) {
-                if (node.selected && !node.isDir && node.tokens) {
-                    count++;
-                    tokens += node.tokens;
-                }
-                if (node.children) traverse(node.children);
-            }
-        }
-        traverse(tree);
-
-        return { selectedCount: count, totalTokens: tokens };
+        const stats = getSelectedStats(tree);
+        return { selectedCount: stats.count, totalTokens: stats.tokens };
     }, [tree]);
+
+    // Scroll indicators
+    const visibleStart = Math.max(0, cursor - 10);
+    const visibleEnd = Math.min(flatList.length, cursor + 15);
+    const hasMoreAbove = visibleStart > 0;
+    const hasMoreBelow = visibleEnd < flatList.length;
 
     // Handle keyboard input
     useInput((input, key) => {
@@ -208,183 +162,229 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
             return;
         }
 
+        // Navigation: j/k (vim), Ctrl+d/u for half-page
         if (key.upArrow || input === 'k') {
             setCursor(c => Math.max(0, c - 1));
+            setLastKey('');
             return;
         }
 
         if (key.downArrow || input === 'j') {
             setCursor(c => Math.min(flatList.length - 1, c + 1));
+            setLastKey('');
             return;
         }
 
-        if (input === ' ') {
-            // Toggle selection
-            const item = flatList[cursor];
-            if (!item) return;
-
-            setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-
-                function toggle(nodes: FileNode[], targetPath: string): boolean {
-                    for (const node of nodes) {
-                        if (node.path === targetPath) {
-                            node.selected = !node.selected;
-                            // If directory, select all children
-                            if (node.isDir && node.children) {
-                                function setAll(children: FileNode[], val: boolean) {
-                                    for (const child of children) {
-                                        child.selected = val;
-                                        if (child.children) setAll(child.children, val);
-                                    }
-                                }
-                                setAll(node.children, node.selected);
-                            }
-                            return true;
-                        }
-                        if (node.children && toggle(node.children, targetPath)) {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                toggle(clone, item.node.path);
-                return clone;
-            });
+        // Half-page down (Ctrl+d vim style)
+        if (key.ctrl && input === 'd') {
+            setCursor(c => Math.min(flatList.length - 1, c + 10));
+            setLastKey('');
             return;
         }
 
-        if (key.return) {
-            const item = flatList[cursor];
-            if (item?.node.isDir) {
-                // Toggle expand
-                setTree(prev => {
-                    const clone = JSON.parse(JSON.stringify(prev));
+        // Half-page up (Ctrl+u vim style)
+        if (key.ctrl && input === 'u') {
+            setCursor(c => Math.max(0, c - 10));
+            setLastKey('');
+            return;
+        }
 
-                    function toggleExpand(nodes: FileNode[], targetPath: string): boolean {
-                        for (const node of nodes) {
-                            if (node.path === targetPath) {
-                                node.expanded = !node.expanded;
-                                return true;
-                            }
-                            if (node.children && toggleExpand(node.children, targetPath)) {
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-
-                    toggleExpand(clone, item.node.path);
-                    return clone;
-                });
+        // Jump to top: gg (vim double-g)
+        if (input === 'g') {
+            if (lastKey === 'g') {
+                setCursor(0);
+                setLastKey('');
+            } else {
+                setLastKey('g');
             }
             return;
         }
 
-        if (input === 'a') {
-            // Select all
+        // Jump to bottom: G (vim)
+        if (input === 'G') {
+            setCursor(flatList.length - 1);
+            setLastKey('');
+            return;
+        }
+
+        // Toggle selection: x (vim-like mark/cross)
+        if (input === 'x' || input === ' ') {
+            const item = flatList[cursor];
+            if (!item) return;
+
             setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-                function selectAll(nodes: FileNode[]) {
-                    for (const node of nodes) {
-                        node.selected = true;
-                        if (node.children) selectAll(node.children);
-                    }
+                const clone = cloneTree(prev);
+                toggleSelection(clone, item.node.path);
+                return clone;
+            });
+            setLastKey('');
+            return;
+        }
+
+        // Toggle expand: o (vim open fold) or Enter or l (vim right = expand)
+        if (input === 'o' || input === 'l' || key.return) {
+            const item = flatList[cursor];
+            if (item?.node.isDir) {
+                // l only expands, h only collapses
+                if (input === 'l' && item.node.expanded) {
+                    setLastKey('');
+                    return;
                 }
+                setTree(prev => {
+                    const clone = cloneTree(prev);
+                    if (input === 'l') {
+                        // Expand only - use findAndApply to set expanded
+                        findAndApply(clone, item.node.path, node => { node.expanded = true; });
+                    } else {
+                        toggleExpand(clone, item.node.path);
+                    }
+                    return clone;
+                });
+            }
+            setLastKey('');
+            return;
+        }
+
+        // Collapse: h (vim left = collapse)
+        if (input === 'h') {
+            const item = flatList[cursor];
+            if (item?.node.isDir && item.node.expanded) {
+                setTree(prev => {
+                    const clone = cloneTree(prev);
+                    toggleExpand(clone, item.node.path);
+                    return clone;
+                });
+            }
+            setLastKey('');
+            return;
+        }
+
+        // Select all: a or Ctrl+a
+        if (input === 'a' || (key.ctrl && input === 'a')) {
+            setTree(prev => {
+                const clone = cloneTree(prev);
                 selectAll(clone);
                 return clone;
             });
+            setLastKey('');
             return;
         }
 
-        if (input === 'n') {
-            // Deselect all (None)
+        // Deselect all: u (vim undo-like) or n
+        if (input === 'u' || input === 'n') {
             setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-                function deselectAll(nodes: FileNode[]) {
-                    for (const node of nodes) {
-                        node.selected = false;
-                        if (node.children) deselectAll(node.children);
-                    }
-                }
+                const clone = cloneTree(prev);
                 deselectAll(clone);
                 return clone;
             });
+            setLastKey('');
             return;
         }
 
+        // Invert selection: i (vim insert = flip)
         if (input === 'i') {
-            // Invert selection
             setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-                function invertAll(nodes: FileNode[]) {
-                    for (const node of nodes) {
-                        if (!node.isDir) {
-                            node.selected = !node.selected;
-                        }
-                        if (node.children) invertAll(node.children);
-                    }
-                }
-                invertAll(clone);
+                const clone = cloneTree(prev);
+                invertSelection(clone);
                 return clone;
             });
+            setLastKey('');
             return;
         }
 
-        if (input === 'e') {
-            // Expand all directories
+        // Expand all: zR (vim) - we use 'e' or detect zR
+        if (input === 'R' && lastKey === 'z') {
             setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-                function expandAll(nodes: FileNode[]) {
-                    for (const node of nodes) {
-                        if (node.isDir) node.expanded = true;
-                        if (node.children) expandAll(node.children);
-                    }
-                }
+                const clone = cloneTree(prev);
                 expandAll(clone);
                 return clone;
             });
+            setLastKey('');
+            return;
+        }
+        if (input === 'e') {
+            setTree(prev => {
+                const clone = cloneTree(prev);
+                expandAll(clone);
+                return clone;
+            });
+            setLastKey('');
             return;
         }
 
-        if (input === 'z') {
-            // Collapse all directories (fold)
+        // Collapse all: zM (vim) - we use 'E' or detect zM
+        if (input === 'M' && lastKey === 'z') {
             setTree(prev => {
-                const clone = JSON.parse(JSON.stringify(prev));
-                function collapseAll(nodes: FileNode[]) {
-                    for (const node of nodes) {
-                        if (node.isDir) node.expanded = false;
-                        if (node.children) collapseAll(node.children);
-                    }
-                }
+                const clone = cloneTree(prev);
                 collapseAll(clone);
                 return clone;
             });
+            setLastKey('');
+            return;
+        }
+        if (input === 'E') {
+            setTree(prev => {
+                const clone = cloneTree(prev);
+                collapseAll(clone);
+                return clone;
+            });
+            setLastKey('');
             return;
         }
 
-        if (input === 'c') {
-            // Confirm and generate
-            const selectedResults = results.filter(r => {
-                function isSelected(nodes: FileNode[], path: string): boolean {
-                    for (const node of nodes) {
-                        if (node.path === path) return node.selected;
-                        if (node.children) {
-                            const result = isSelected(node.children, path);
-                            if (result !== undefined) return result;
-                        }
-                    }
-                    return false;
-                }
-                return isSelected(tree, r.path);
-            });
+        // Store z for z-commands
+        if (input === 'z') {
+            setLastKey('z');
+            return;
+        }
 
+        // Select current directory files: * (vim search-like)
+        if (input === '*') {
+            const item = flatList[cursor];
+            if (item?.node.isDir) {
+                setTree(prev => {
+                    const clone = cloneTree(prev);
+                    toggleCurrentDirSelection(clone, item.node.path);
+                    return clone;
+                });
+            }
+            setLastKey('');
+            return;
+        }
+
+        // Toggle test files: t
+        if (input === 't') {
+            setTree(prev => {
+                const clone = cloneTree(prev);
+                toggleTestFiles(clone);
+                return clone;
+            });
+            setLastKey('');
+            return;
+        }
+
+        // Toggle dir stats display: s
+        if (input === 's') {
+            setShowDirStats(prev => !prev);
+            setLastKey('');
+            return;
+        }
+
+        // Confirm: ZZ (vim save & quit) or c
+        if ((input === 'Z' && lastKey === 'Z') || input === 'c') {
+            const selectedResults = results.filter(r => isNodeSelected(tree, r.path));
             const output = format(selectedResults, { format: 'markdown', includeTree: true });
             onComplete(output);
             exit();
             return;
         }
+        if (input === 'Z') {
+            setLastKey('Z');
+            return;
+        }
+
+        // Clear lastKey for unrecognized inputs
+        setLastKey('');
     });
 
     if (loading) {
@@ -417,21 +417,36 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
                 )}
             </Box>
 
+            {/* Scroll indicator (top) */}
+            {hasMoreAbove && (
+                <Box>
+                    <Text color="yellow" dimColor>  ↑ {visibleStart} more items above</Text>
+                </Box>
+            )}
+
             {/* File Tree */}
             <Box flexDirection="column" marginBottom={1}>
-                {flatList.slice(Math.max(0, cursor - 10), cursor + 15).map(({ node, depth }, i) => (
+                {flatList.slice(visibleStart, visibleEnd).map(({ node, depth }, i) => (
                     <TreeItem
                         key={node.path}
                         node={node}
                         depth={depth}
-                        isActive={cursor === Math.max(0, cursor - 10) + i}
+                        isActive={cursor === visibleStart + i}
                         filter={filter}
+                        showDirStats={showDirStats}
                     />
                 ))}
                 {flatList.length === 0 && (
                     <Text color="gray">No files found</Text>
                 )}
             </Box>
+
+            {/* Scroll indicator (bottom) */}
+            {hasMoreBelow && (
+                <Box>
+                    <Text color="yellow" dimColor>  ↓ {flatList.length - visibleEnd} more items below</Text>
+                </Box>
+            )}
 
             {/* Status Bar */}
             <Box borderStyle="single" borderColor="gray" paddingX={1}>
@@ -441,16 +456,19 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
                 </Text>
             </Box>
 
-            {/* Help */}
+            {/* Help - Vim Style */}
             <Box marginTop={1} flexDirection="column">
                 <Text color="gray">
-                    [↑↓/jk] Navigate  [Space] Toggle  [Enter] Expand/Collapse
+                    [j/k] ↑↓  [gg/G] Top/Bottom  [Ctrl+d/u] Page  [h/l] Fold/Unfold
                 </Text>
                 <Text color="gray">
-                    [a] All  [n] None  [i] Invert  [e] Expand All  [z] Collapse All
+                    [x/Space] Toggle  [o] Open  [a] All  [u] None  [i] Invert
                 </Text>
                 <Text color="gray">
-                    [/] Search  [c] Confirm  [q] Quit
+                    [e/zR] Expand all  [E/zM] Collapse all  [*] Dir  [t] Tests
+                </Text>
+                <Text color="gray">
+                    [/] Search  [s] Stats  [c/ZZ] Confirm  [q] Quit
                 </Text>
             </Box>
         </Box>

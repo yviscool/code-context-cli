@@ -37,6 +37,8 @@ cli
     .option('-s, --symbols', 'Show symbol statistics for each file')
     .option('--signatures-only', 'Export only function/class signatures, not implementations')
     .option('--no-test', 'Exclude test files (*.test.*, *.spec.*, __tests__)')
+    .option('--stats', 'Show detailed statistics (files, languages, tokens)')
+    .option('--compact', 'Compress output by removing comments and empty lines')
     .action(async (dir: string | undefined, options) => {
         const cwd = resolve(dir || '.');
 
@@ -105,6 +107,26 @@ cli
             const totalTokens = results.reduce((sum, r) => sum + r.tokenInfo.tokens, 0);
             console.log(pc.dim(`  Total tokens: ${formatTokens(totalTokens)}`));
 
+            // Show detailed stats if requested
+            if (options.stats) {
+                const langStats: Record<string, { files: number; tokens: number }> = {};
+                for (const r of results) {
+                    if (!langStats[r.language]) {
+                        langStats[r.language] = { files: 0, tokens: 0 };
+                    }
+                    langStats[r.language].files++;
+                    langStats[r.language].tokens += r.tokenInfo.tokens;
+                }
+
+                console.log(pc.cyan('\n📊 Statistics:'));
+                console.log(pc.dim(`   Total files: ${results.length}`));
+                console.log(pc.dim(`   Total tokens: ${formatTokens(totalTokens)}`));
+                console.log(pc.dim(`   Languages:`));
+                for (const [lang, stat] of Object.entries(langStats).sort((a, b) => b[1].tokens - a[1].tokens)) {
+                    console.log(pc.dim(`     - ${lang}: ${stat.files} files, ${formatTokens(stat.tokens)} tokens`));
+                }
+            }
+
             // Apply budget if specified
             if (options.budget) {
                 const maxTokens = parseBudget(options.budget as string);
@@ -139,6 +161,7 @@ cli
                         includeTree: options.tree !== false,
                         signaturesOnly: options.signaturesOnly,
                         symbols: symbolsMap,
+                        compact: options.compact,
                     },
                 });
 
@@ -151,6 +174,7 @@ cli
                 includeTree: options.tree !== false,
                 signaturesOnly: options.signaturesOnly,
                 symbols: symbolsMap,
+                compact: options.compact,
             });
 
             await outputController.write(output, {
