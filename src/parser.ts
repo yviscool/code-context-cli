@@ -30,8 +30,11 @@ async function tryLoadTreeSitter(): Promise<boolean> {
     if (treeSitterAvailable !== null) return treeSitterAvailable;
 
     try {
+        // @ts-ignore - optional dependency
         Parser = (await import('tree-sitter')).default;
+        // @ts-ignore - optional dependency
         TypeScript = (await import('tree-sitter-typescript')).default;
+        // @ts-ignore - optional dependency
         JavaScript = (await import('tree-sitter-javascript')).default;
         treeSitterAvailable = true;
     } catch {

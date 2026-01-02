@@ -45,6 +45,7 @@ ctx --interactive
 | `--chunk <tok>` | 分块大小 |
 | `-s, --symbols` | 显示符号统计 |
 | `--signatures-only` | 仅导出签名 |
+| `--no-test` | 排除测试文件 |
 | `-c, --copy` | 复制到剪贴板 |
 | `-o, --output <file>` | 输出文件 |
 

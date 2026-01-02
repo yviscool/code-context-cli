@@ -36,15 +36,21 @@ cli
     .option('--priority <patterns>', 'Priority file patterns (comma-separated)')
     .option('-s, --symbols', 'Show symbol statistics for each file')
     .option('--signatures-only', 'Export only function/class signatures, not implementations')
+    .option('--no-test', 'Exclude test files (*.test.*, *.spec.*, __tests__)')
     .action(async (dir: string | undefined, options) => {
         const cwd = resolve(dir || '.');
 
         const extensions = (options.ext as string).split(',').map(e => e.trim());
         const patterns = extensions.map(ext => `**/*.${ext}`);
 
-        const ignore = options.ignore
+        let ignore = options.ignore
             ? (options.ignore as string).split(',').map(p => p.trim())
             : [];
+
+        // Add test file patterns if --no-test is specified
+        if (options.test === false) {
+            ignore = [...ignore, '**/*.test.*', '**/*.spec.*', '**/__tests__/**'];
+        }
 
         // Interactive mode
         if (options.interactive) {
