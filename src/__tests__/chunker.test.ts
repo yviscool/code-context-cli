@@ -4,12 +4,20 @@
 import { describe, test, expect } from 'bun:test';
 import { splitToChunks, getChunkHeader } from '../chunker';
 import type { ScanResult } from '../scanner';
+import { countTokens } from '../tokenizer';
+
+const createMockResult = (path: string, content: string, language: string): ScanResult => ({
+    path,
+    content,
+    language,
+    tokenInfo: countTokens(content),
+});
 
 const mockResults: ScanResult[] = [
-    { path: 'a.ts', content: 'const a = 1;', language: 'typescript' },
-    { path: 'b.ts', content: 'const b = 2;', language: 'typescript' },
-    { path: 'c.ts', content: 'const c = 3;'.repeat(100), language: 'typescript' },
-    { path: 'd.ts', content: 'const d = 4;', language: 'typescript' },
+    createMockResult('a.ts', 'const a = 1;', 'typescript'),
+    createMockResult('b.ts', 'const b = 2;', 'typescript'),
+    createMockResult('c.ts', 'const c = 3;'.repeat(100), 'typescript'),
+    createMockResult('d.ts', 'const d = 4;', 'typescript'),
 ];
 
 describe('Chunker', () => {

@@ -4,11 +4,19 @@
 import { describe, test, expect } from 'bun:test';
 import { fitToBudget, getBudgetSummary } from '../budget';
 import type { ScanResult } from '../scanner';
+import { countTokens } from '../tokenizer';
+
+const createMockResult = (path: string, content: string, language: string): ScanResult => ({
+    path,
+    content,
+    language,
+    tokenInfo: countTokens(content),
+});
 
 const mockResults: ScanResult[] = [
-    { path: 'small.ts', content: 'const x = 1;', language: 'typescript' },
-    { path: 'medium.ts', content: 'function hello() {\n  console.log("world");\n}'.repeat(10), language: 'typescript' },
-    { path: 'large.ts', content: 'const data = '.padEnd(1000, 'x'), language: 'typescript' },
+    createMockResult('small.ts', 'const x = 1;', 'typescript'),
+    createMockResult('medium.ts', 'function hello() {\n  console.log("world");\n}'.repeat(10), 'typescript'),
+    createMockResult('large.ts', 'const data = '.padEnd(1000, 'x'), 'typescript'),
 ];
 
 describe('Budget', () => {

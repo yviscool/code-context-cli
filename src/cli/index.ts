@@ -7,13 +7,13 @@ import cac from 'cac';
 import pc from 'picocolors';
 import { resolve } from 'path';
 import { writeFile } from 'fs/promises';
-import clipboard from 'clipboardy';
 import { scan } from '../scanner';
 import { format } from '../formatter';
-import { countTokens, formatTokens, parseBudget, MODEL_LIMITS } from '../tokenizer';
+import { formatTokens, parseBudget, MODEL_LIMITS } from '../tokenizer';
 import { fitToBudget, getBudgetSummary } from '../budget';
-import { splitToChunks, getChunkHeader } from '../chunker';
+import { splitToChunks } from '../chunker';
 import { parseSymbols, getSymbolSummary, type CodeSymbol } from '../parser';
+import { outputController } from '../output';
 
 const cli = cac('ctx');
 
@@ -95,11 +95,8 @@ cli
                 }
             }
 
-            // Calculate total tokens
-            let totalTokens = 0;
-            for (const result of results) {
-                totalTokens += countTokens(result.content).tokens;
-            }
+            // Calculate total tokens from preloaded tokenInfo
+            const totalTokens = results.reduce((sum, r) => sum + r.tokenInfo.tokens, 0);
             console.log(pc.dim(`  Total tokens: ${formatTokens(totalTokens)}`));
 
             // Apply budget if specified
@@ -128,39 +125,16 @@ cli
                 const maxTokensPerChunk = parseBudget(options.chunk as string);
                 const chunks = splitToChunks(results, { maxTokensPerChunk });
 
-                console.log(pc.cyan(`\n📦 Split into ${chunks.length} chunks`));
-
-                for (const chunk of chunks) {
-                    const output = getChunkHeader(chunk) + '\n\n' + format(chunk.files, {
+                await outputController.writeChunks(chunks, {
+                    file: options.output,
+                    clipboard: options.copy,
+                    formatOptions: {
                         format: options.format as 'markdown' | 'xml',
                         includeTree: options.tree !== false,
                         signaturesOnly: options.signaturesOnly,
                         symbols: symbolsMap,
-                    });
-
-                    const filename = options.output
-                        ? options.output.replace(/(\.\w+)?$/, `.${chunk.index + 1}$1`)
-                        : null;
-
-                    if (filename) {
-                        await writeFile(filename, output, 'utf-8');
-                        console.log(pc.green(`  ✓ Chunk ${chunk.index + 1}/${chunk.total}: ${filename}`));
-                    } else {
-                        console.log(pc.dim(`\n--- Chunk ${chunk.index + 1}/${chunk.total} ---`));
-                        console.log(output);
-                    }
-                }
-
-                if (options.copy && chunks.length > 0) {
-                    const firstOutput = getChunkHeader(chunks[0]) + '\n\n' + format(chunks[0].files, {
-                        format: options.format as 'markdown' | 'xml',
-                        includeTree: options.tree !== false,
-                        signaturesOnly: options.signaturesOnly,
-                        symbols: symbolsMap,
-                    });
-                    await clipboard.write(firstOutput);
-                    console.log(pc.green('\n✓ First chunk copied to clipboard'));
-                }
+                    },
+                });
 
                 return;
             }
@@ -173,18 +147,10 @@ cli
                 symbols: symbolsMap,
             });
 
-            if (options.copy) {
-                await clipboard.write(output);
-                console.log(pc.green('✓ Copied to clipboard'));
-            }
-
-            if (options.output) {
-                await writeFile(options.output, output, 'utf-8');
-                console.log(pc.green(`✓ Written to ${options.output}`));
-            } else if (!options.copy) {
-                console.log(pc.dim('---'));
-                console.log(output);
-            }
+            await outputController.write(output, {
+                file: options.output,
+                clipboard: options.copy,
+            });
         } catch (err) {
             console.error(pc.red('Error:'), err);
             process.exit(1);

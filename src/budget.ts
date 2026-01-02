@@ -3,7 +3,7 @@
  * Context budget control for fitting content within token limits
  */
 import type { ScanResult } from './scanner';
-import { countTokens, formatTokens } from './tokenizer';
+import { formatTokens } from './tokenizer';
 
 export interface BudgetConfig {
     maxTokens: number;
@@ -17,16 +17,6 @@ export interface BudgetResult {
     totalTokens: number;
     budgetUsed: number;
     budgetRemaining: number;
-}
-
-/**
- * Calculate tokens for each file
- */
-function calcFileTokens(results: ScanResult[]): Array<{ result: ScanResult; tokens: number }> {
-    return results.map(result => ({
-        result,
-        tokens: countTokens(result.content).tokens,
-    }));
 }
 
 /**
@@ -54,7 +44,7 @@ export function fitToBudget(results: ScanResult[], config: BudgetConfig): Budget
     const { maxTokens, reserveTokens = 0, priorityPatterns = [] } = config;
     const effectiveBudget = maxTokens - reserveTokens;
 
-    const filesWithTokens = calcFileTokens(results);
+    const filesWithTokens = results.map(r => ({ result: r, tokens: r.tokenInfo.tokens }));
     const sortedFiles = sortByPriority(filesWithTokens, priorityPatterns);
 
     const included: ScanResult[] = [];

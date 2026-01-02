@@ -3,7 +3,7 @@
  * Split large content into manageable chunks
  */
 import type { ScanResult } from './scanner';
-import { countTokens, formatTokens } from './tokenizer';
+import { formatTokens } from './tokenizer';
 
 export interface Chunk {
     index: number;
@@ -25,7 +25,7 @@ export function splitToChunks(results: ScanResult[], options: ChunkOptions): Chu
 
     const filesWithTokens = results.map(result => ({
         result,
-        tokens: countTokens(result.content).tokens,
+        tokens: result.tokenInfo.tokens,
     }));
 
     const chunks: Chunk[] = [];
@@ -77,7 +77,7 @@ export function splitToChunks(results: ScanResult[], options: ChunkOptions): Chu
                 ? currentChunk.slice(-overlap)
                 : [];
             const overlapTokens = overlapFiles.reduce(
-                (sum, f) => sum + countTokens(f.content).tokens,
+                (sum, f) => sum + f.tokenInfo.tokens,
                 0
             );
 

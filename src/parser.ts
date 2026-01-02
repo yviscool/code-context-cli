@@ -3,6 +3,7 @@
  * Extract code symbols with Regex (Tree-sitter optional)
  */
 import { countTokens } from './tokenizer';
+import { getPatternsForLanguage } from './patterns';
 
 export type SymbolKind = 'function' | 'class' | 'interface' | 'type' | 'method' | 'variable' | 'export';
 
@@ -133,18 +134,13 @@ function parseWithTreeSitter(content: string, language: string): CodeSymbol[] {
 /**
  * Parse with Regex (fallback)
  */
-function parseWithRegex(content: string): CodeSymbol[] {
+function parseWithRegex(content: string, language: string): CodeSymbol[] {
+    const patterns = getPatternsForLanguage(language);
+    if (patterns.length === 0) return [];
+
     const symbols: CodeSymbol[] = [];
     const lines = content.split('\n');
     const processedLines = new Set<number>();
-
-    const patterns: Array<{ regex: RegExp; kind: SymbolKind }> = [
-        { regex: /^(?:export\s+(?:default\s+)?)?(?:async\s+)?function\s+(\w+)/, kind: 'function' },
-        { regex: /^(?:export\s+)?(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)|[a-zA-Z_]\w*)\s*(?::\s*[^=]+)?\s*=>/, kind: 'function' },
-        { regex: /^(?:export\s+)?(?:abstract\s+)?class\s+(\w+)/, kind: 'class' },
-        { regex: /^(?:export\s+)?interface\s+(\w+)/, kind: 'interface' },
-        { regex: /^(?:export\s+)?type\s+(\w+)/, kind: 'type' },
-    ];
 
     for (let i = 0; i < lines.length; i++) {
         if (processedLines.has(i)) continue;
@@ -206,7 +202,7 @@ export async function parseSymbols(content: string, language: string): Promise<C
         }
     }
 
-    return parseWithRegex(content);
+    return parseWithRegex(content, language);
 }
 
 /**

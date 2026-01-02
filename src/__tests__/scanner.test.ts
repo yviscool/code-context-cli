@@ -33,7 +33,7 @@ describe('Scanner', () => {
         });
 
         expect(results.length).toBe(2);
-        expect(results.map(r => r.path).sort()).toEqual(['src/main.ts', 'src/utils.ts']);
+        expect(results.map(r => r.path.replace(/\\/g, '/')).sort()).toEqual(['src/main.ts', 'src/utils.ts']);
     });
 
     test('should detect correct language', async () => {
@@ -67,7 +67,7 @@ describe('Scanner', () => {
         });
 
         expect(results.length).toBe(1);
-        expect(results[0].path).toBe('src/main.ts');
+        expect(results[0].path.replace(/\\/g, '/')).toBe('src/main.ts');
     });
 
     test('should read file content correctly', async () => {
@@ -77,5 +77,17 @@ describe('Scanner', () => {
         });
 
         expect(results[0].content).toBe('console.log("main");');
+    });
+
+    test('should include tokenInfo in scan results', async () => {
+        const results = await scan({
+            cwd: TEST_DIR,
+            patterns: ['**/main.ts'],
+        });
+
+        expect(results[0].tokenInfo).toBeDefined();
+        expect(results[0].tokenInfo.tokens).toBeGreaterThan(0);
+        expect(results[0].tokenInfo.chars).toBe(results[0].content.length);
+        expect(results[0].tokenInfo.lines).toBeGreaterThan(0);
     });
 });
