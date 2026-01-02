@@ -17,3 +17,4 @@ export { fitToBudget, getBudgetSummary, type BudgetConfig, type BudgetResult } f
 export { splitToChunks, getChunkHeader, type Chunk, type ChunkOptions } from './chunker';
 export { parseSymbols, getSymbolSummary, type CodeSymbol, type SymbolKind } from './parser';
 export { launchTUI } from './tui/App';
+export { t, getLocale, setLocale, isChinese, type Locale } from './i18n';

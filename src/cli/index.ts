@@ -14,31 +14,32 @@ import { fitToBudget, getBudgetSummary } from '../budget';
 import { splitToChunks } from '../chunker';
 import { parseSymbols, getSymbolSummary, type CodeSymbol } from '../parser';
 import { outputController } from '../output';
+import { t } from '../i18n';
 
 const cli = cac('ctx');
 
 const DEFAULT_EXTENSIONS = 'ts,js,tsx,jsx,py,rs,go,java,c,cpp,h,hpp,css,html,json,yaml,yml,md,sh,sql,vue,svelte';
 
 cli
-    .command('[dir]', 'Scan directory and generate AI-ready context')
-    .option('-e, --ext <extensions>', 'File extensions to include (comma-separated)', {
+    .command('[dir]', t('cli.cmd.desc'))
+    .option('-e, --ext <extensions>', t('cli.opt.ext'), {
         default: DEFAULT_EXTENSIONS,
     })
-    .option('-i, --ignore <patterns>', 'Patterns to ignore (comma-separated)')
-    .option('-o, --output <file>', 'Output file path (default: stdout)')
-    .option('-f, --format <type>', 'Output format: markdown or xml', { default: 'markdown' })
-    .option('--no-tree', 'Exclude directory tree from output')
-    .option('-c, --copy', 'Copy output to clipboard')
-    .option('--interactive', 'Launch interactive TUI mode')
-    .option('-b, --budget <tokens>', 'Token budget limit (e.g., 32k, 128000)')
-    .option('--chunk <tokens>', 'Split output into chunks of max tokens')
-    .option('-m, --model <name>', 'Model for token limit reference', { default: 'gpt-4o' })
-    .option('--priority <patterns>', 'Priority file patterns (comma-separated)')
-    .option('-s, --symbols', 'Show symbol statistics for each file')
-    .option('--signatures-only', 'Export only function/class signatures, not implementations')
-    .option('--no-test', 'Exclude test files (*.test.*, *.spec.*, __tests__)')
-    .option('--stats', 'Show detailed statistics (files, languages, tokens)')
-    .option('--compact', 'Compress output by removing comments and empty lines')
+    .option('-i, --ignore <patterns>', t('cli.opt.ignore'))
+    .option('-o, --output <file>', t('cli.opt.output'))
+    .option('-f, --format <type>', t('cli.opt.format'), { default: 'markdown' })
+    .option('--no-tree', t('cli.opt.no_tree'))
+    .option('-c, --copy', t('cli.opt.copy'))
+    .option('--interactive', t('cli.opt.interactive'))
+    .option('-b, --budget <tokens>', t('cli.opt.budget'))
+    .option('--chunk <tokens>', t('cli.opt.chunk'))
+    .option('-m, --model <name>', t('cli.opt.model'), { default: 'gpt-4o' })
+    .option('--priority <patterns>', t('cli.opt.priority'))
+    .option('-s, --symbols', t('cli.opt.symbols'))
+    .option('--signatures-only', t('cli.opt.signatures_only'))
+    .option('--no-test', t('cli.opt.no_test'))
+    .option('--stats', t('cli.opt.stats'))
+    .option('--compact', t('cli.opt.compact'))
     .action(async (dir: string | undefined, options) => {
         const cwd = resolve(dir || '.');
 
@@ -66,7 +67,7 @@ cli
 
             if (options.output) {
                 await writeFile(options.output, output, 'utf-8');
-                console.log(pc.green(`\n✓ Written to ${options.output}`));
+                console.log(pc.green(`\n${t('cli.written_to', options.output)}`));
             } else if (!options.copy) {
                 console.log('\n' + output);
             }
@@ -74,22 +75,22 @@ cli
         }
 
         // Non-interactive mode
-        console.log(pc.cyan('📂 Scanning:'), cwd);
-        console.log(pc.dim(`   Patterns: ${patterns.slice(0, 5).join(', ')}${patterns.length > 5 ? '...' : ''}`));
+        console.log(pc.cyan(t('cli.scanning')), cwd);
+        console.log(pc.dim(`   ${t('cli.patterns', patterns.slice(0, 5).join(', ') + (patterns.length > 5 ? '...' : ''))}`));
         if (ignore.length > 0) {
-            console.log(pc.dim(`   Ignoring: ${ignore.join(', ')}`));
+            console.log(pc.dim(`   ${t('cli.ignoring', ignore.join(', '))}`));
         }
 
         try {
             let results = await scan({ cwd, patterns, ignore });
 
-            console.log(pc.green(`✓ Found ${results.length} files`));
+            console.log(pc.green(t('cli.found_files', results.length)));
 
             // Parse symbols if needed
             const symbolsMap = new Map<string, CodeSymbol[]>();
 
             if (options.symbols || options.signaturesOnly) {
-                console.log(pc.dim('  Parsing symbols...'));
+                console.log(pc.dim(`  ${t('cli.parsing_symbols')}`));
 
                 for (const result of results) {
                     if (['typescript', 'javascript', 'tsx', 'jsx'].includes(result.language)) {
@@ -105,7 +106,7 @@ cli
 
             // Calculate total tokens from preloaded tokenInfo
             const totalTokens = results.reduce((sum, r) => sum + r.tokenInfo.tokens, 0);
-            console.log(pc.dim(`  Total tokens: ${formatTokens(totalTokens)}`));
+            console.log(pc.dim(`  ${t('cli.total_tokens', formatTokens(totalTokens))}`));
 
             // Show detailed stats if requested
             if (options.stats) {
@@ -118,12 +119,12 @@ cli
                     langStats[r.language].tokens += r.tokenInfo.tokens;
                 }
 
-                console.log(pc.cyan('\n📊 Statistics:'));
-                console.log(pc.dim(`   Total files: ${results.length}`));
-                console.log(pc.dim(`   Total tokens: ${formatTokens(totalTokens)}`));
-                console.log(pc.dim(`   Languages:`));
+                console.log(pc.cyan(`\n${t('cli.statistics')}`));
+                console.log(pc.dim(`   ${t('cli.total_files', results.length)}`));
+                console.log(pc.dim(`   ${t('cli.total_tokens', formatTokens(totalTokens))}`));
+                console.log(pc.dim(`   ${t('cli.languages')}`));
                 for (const [lang, stat] of Object.entries(langStats).sort((a, b) => b[1].tokens - a[1].tokens)) {
-                    console.log(pc.dim(`     - ${lang}: ${stat.files} files, ${formatTokens(stat.tokens)} tokens`));
+                    console.log(pc.dim(`     ${t('cli.lang_stat', lang, stat.files, formatTokens(stat.tokens))}`));
                 }
             }
 
@@ -141,10 +142,10 @@ cli
                 });
 
                 results = budgetResult.included;
-                console.log(pc.yellow(`  Budget: ${getBudgetSummary(budgetResult, maxTokens)}`));
+                console.log(pc.yellow(`  ${t('cli.budget', getBudgetSummary(budgetResult, maxTokens))}`));
 
                 if (budgetResult.excluded.length > 0) {
-                    console.log(pc.dim(`  Excluded: ${budgetResult.excluded.slice(0, 3).map(f => f.path).join(', ')}${budgetResult.excluded.length > 3 ? '...' : ''}`));
+                    console.log(pc.dim(`  ${t('cli.excluded', budgetResult.excluded.slice(0, 3).map(f => f.path).join(', ') + (budgetResult.excluded.length > 3 ? '...' : ''))}`));
                 }
             }
 
@@ -182,7 +183,7 @@ cli
                 clipboard: options.copy,
             });
         } catch (err) {
-            console.error(pc.red('Error:'), err);
+            console.error(pc.red(t('cli.error')), err);
             process.exit(1);
         }
     });

@@ -8,6 +8,7 @@ import TextInput from 'ink-text-input';
 import { scan, type ScanResult } from '../scanner';
 import { format } from '../formatter';
 import { formatTokens, getTokenColor } from '../tokenizer';
+import { t } from '../i18n';
 import clipboard from 'clipboardy';
 
 import {
@@ -390,7 +391,7 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
     if (loading) {
         return (
             <Box flexDirection="column" padding={1}>
-                <Text color="cyan">⏳ Scanning files...</Text>
+                <Text color="cyan">{t('tui.scanning')}</Text>
             </Box>
         );
     }
@@ -400,7 +401,7 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
             {/* Header */}
             <Box marginBottom={1}>
                 <Text bold color="cyan">ctx</Text>
-                <Text color="gray"> - Code Context Generator</Text>
+                <Text color="gray"> - {t('tui.title')}</Text>
             </Box>
 
             {/* Search */}
@@ -410,17 +411,17 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
                     <TextInput
                         value={filter}
                         onChange={setFilter}
-                        placeholder="Type to filter..."
+                        placeholder={t('tui.search_placeholder')}
                     />
                 ) : (
-                    <Text color="gray">{filter || 'Press / to search'}</Text>
+                    <Text color="gray">{filter || t('tui.search_hint')}</Text>
                 )}
             </Box>
 
             {/* Scroll indicator (top) */}
             {hasMoreAbove && (
                 <Box>
-                    <Text color="yellow" dimColor>  ↑ {visibleStart} more items above</Text>
+                    <Text color="yellow" dimColor>  {t('tui.more_above', visibleStart)}</Text>
                 </Box>
             )}
 
@@ -437,38 +438,38 @@ function App({ cwd, patterns, ignore, onComplete }: AppProps) {
                     />
                 ))}
                 {flatList.length === 0 && (
-                    <Text color="gray">No files found</Text>
+                    <Text color="gray">{t('tui.no_files')}</Text>
                 )}
             </Box>
 
             {/* Scroll indicator (bottom) */}
             {hasMoreBelow && (
                 <Box>
-                    <Text color="yellow" dimColor>  ↓ {flatList.length - visibleEnd} more items below</Text>
+                    <Text color="yellow" dimColor>  {t('tui.more_below', flatList.length - visibleEnd)}</Text>
                 </Box>
             )}
 
             {/* Status Bar */}
             <Box borderStyle="single" borderColor="gray" paddingX={1}>
                 <Text>
-                    Selected: <Text bold color="green">{selectedCount}</Text> files |
-                    Tokens: <Text bold color={getTokenColor(totalTokens)}>{formatTokens(totalTokens)}</Text>
+                    {t('tui.selected')} <Text bold color="green">{selectedCount}</Text> {t('tui.files')} |
+                    {t('tui.tokens')} <Text bold color={getTokenColor(totalTokens)}>{formatTokens(totalTokens)}</Text>
                 </Text>
             </Box>
 
             {/* Help - Vim Style */}
             <Box marginTop={1} flexDirection="column">
                 <Text color="gray">
-                    [j/k] ↑↓  [gg/G] Top/Bottom  [Ctrl+d/u] Page  [h/l] Fold/Unfold
+                    {t('tui.help.nav')}
                 </Text>
                 <Text color="gray">
-                    [x/Space] Toggle  [o] Open  [a] All  [u] None  [i] Invert
+                    {t('tui.help.select')}
                 </Text>
                 <Text color="gray">
-                    [e/zR] Expand all  [E/zM] Collapse all  [*] Dir  [t] Tests
+                    {t('tui.help.expand')}
                 </Text>
                 <Text color="gray">
-                    [/] Search  [s] Stats  [c/ZZ] Confirm  [q] Quit
+                    {t('tui.help.action')}
                 </Text>
             </Box>
         </Box>
@@ -493,7 +494,7 @@ export async function launchTUI(options: {
                 onComplete={async (output) => {
                     if (options.copyToClipboard) {
                         await clipboard.write(output);
-                        console.log('\n✅ Copied to clipboard!');
+                        console.log(`\n${t('tui.copied')}`);
                     }
                     resolve(output);
                 }}
