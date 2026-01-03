@@ -130,7 +130,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult[]> {
         const content = await readFile(absolutePath, 'utf-8');
 
         results.push({
-          path: file,
+          path: file.replace(/\\/g, '/'),
           content,
           language: detectLanguage(file),
           tokenInfo: countTokens(content),
